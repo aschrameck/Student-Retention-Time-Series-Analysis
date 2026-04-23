@@ -6,9 +6,9 @@
 # ID, Year, Retention, Type (FT/PT)
 #
 # Goal:
-# - Analyze trends in retention over time
-# - Build ARIMA models for FT and PT averages
-# - Compare models and diagnostics
+# - Compute averages
+# - Apply differencing
+# - Various exploratory plots
 # -----------------------------------------------------------
 
 # --- Setup ---
@@ -36,7 +36,6 @@ pt_df <- avg_df %>% filter(Type == "PT")
 
 
 # --- Convert to Time Series Objects ---
-# Years should be consecutive (2014–2024)
 ft_ts <- ts(ft_df$AvgRetention, start = min(ft_df$Year), frequency = 1)
 pt_ts <- ts(pt_df$AvgRetention, start = min(pt_df$Year), frequency = 1)
 
@@ -49,22 +48,42 @@ summary(pt_ts)
 sd(pt_ts)
 
 # Plot time series
-plot.ts(ft_ts, main = "Average Full-Time Retention", ylab = "%")
-plot.ts(pt_ts, main = "Average Part-Time Retention", ylab = "%")
+plot.ts(ft_ts,
+        main = "Average Full-Time Retention",
+        ylab = "%",
+        ylim = range(ft_ts, na.rm = TRUE))
+
+plot.ts(pt_ts,
+        main = "Average Part-Time Retention",
+        ylab = "%",
+        ylim = range(pt_ts, na.rm = TRUE))
 
 # Combined plot
-ts.plot(ft_ts, pt_ts, col = c("blue", "red"), lwd = 2,
-        main = "FT vs PT Retention Over Time", ylab = "%")
-legend("topleft", legend = c("FT", "PT"),
-       col = c("blue", "red"), lty = 1)
+ts.plot(ft_ts, pt_ts,
+        col = c("blue", "red"),
+        lwd = 2,
+        ylim = range(c(ft_ts, pt_ts), na.rm = TRUE),
+        main = "FT vs PT Retention Over Time",
+        ylab = "%")
+
+legend("topleft",
+       legend = c("FT", "PT"),
+       col = c("blue", "red"),
+       lty = 1,
+       bty = "n")
 
 # Differencing to Achieve Stationarity
 # First difference
 ft_diff <- diff(ft_ts)
 pt_diff <- diff(pt_ts)
 
-plot.ts(ft_diff, main = "Differenced FT Series")
-plot.ts(pt_diff, main = "Differenced PT Series")
+plot.ts(ft_diff,
+        main = "Differenced FT Series",
+        ylim = range(ft_diff, na.rm = TRUE))
+
+plot.ts(pt_diff,
+        main = "Differenced PT Series",
+        ylim = range(pt_diff, na.rm = TRUE))
 
 # ACF and PACF Plots
 par(mfrow = c(1,2))
