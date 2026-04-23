@@ -1,131 +1,75 @@
 # -----------------------------------------------------------
-# IPEDS Retention Rates EDA Script
+# Retention Rates Time Series EDA + Modeling Script
 # -----------------------------------------------------------
-# Data: retention_rates.csv (cleaned IPEDS data)
-#
-# Contains:
-# - ID (institution)
-# - {year}_FT_pct (full-time retention, percent)
-# - {year}_PT_pct (part-time retention, percent)
+# Data: retention_long.csv
+# Columns:
+# ID, Year, Retention, Type (FT/PT)
 #
 # Goal:
-# - Explore trends over time
-# - Compare FT vs PT retention
-# - Examine variation across schools
+# - Analyze trends in retention over time
+# - Build ARIMA models for FT and PT averages
+# - Compare models and diagnostics
 # -----------------------------------------------------------
 
 # --- Setup ---
 library(dplyr)
 library(ggplot2)
+library(forecast)
+library(tseries)
 
 # Load data
-df <- read.csv("retention_rates.csv")
+df <- read.csv("retention_long.csv")
 
 # Preview
 head(df)
-str(df)
 
-# -- Separate Columns ---
-# Extract FT and PT columns
-ft_cols <- grep("_FT_pct$", names(df), value = TRUE)
-pt_cols <- grep("_PT_pct$", names(df), value = TRUE)
+# --- Aggregate to Average Retention by Year ---
 
-# Extract years from column names
-years <- as.numeric(sub("_FT_pct", "", ft_cols))
+avg_df <- df %>%
+  group_by(Year, Type) %>%
+  summarise(AvgRetention = mean(Retention, na.rm = TRUE)) %>%
+  ungroup()
 
-# --- Average Retention Rates Over Time ---
-# Compute yearly averages
-avg_ft <- colMeans(df[, ft_cols], na.rm = TRUE)
-avg_pt <- colMeans(df[, pt_cols], na.rm = TRUE)
+# Split FT and PT
+ft_df <- avg_df %>% filter(Type == "FT")
+pt_df <- avg_df %>% filter(Type == "PT")
 
-# Create data frame for plotting
-avg_df <- data.frame(
-  Year = years,
-  Full_Time = avg_ft,
-  Part_Time = avg_pt
-)
 
-# View summary
-avg_df
+# --- Convert to Time Series Objects ---
+# Years should be consecutive (2014–2024)
+ft_ts <- ts(ft_df$AvgRetention, start = min(ft_df$Year), frequency = 1)
+pt_ts <- ts(pt_df$AvgRetention, start = min(pt_df$Year), frequency = 1)
 
-# --- Plot Average Retention Over Time ---
-# Full-time retention trend
-plot(avg_df$Year, avg_df$Full_Time, type = "o",
-     main = "Average Full-Time Retention Over Time",
-     xlab = "Year", ylab = "Retention Rate (%)")
-
-# Part-time retention trend
-plot(avg_df$Year, avg_df$Part_Time, type = "o",
-     main = "Average Part-Time Retention Over Time",
-     xlab = "Year", ylab = "Retention Rate (%)")
-
-# Combined comparison plot
-plot(avg_df$Year, avg_df$Full_Time, type = "o",
-     ylim = range(c(avg_df$Full_Time, avg_df$Part_Time)),
-     xlab = "Year", ylab = "Retention Rate (%)",
-     main = "FT vs PT Retention Rates")
-
-lines(avg_df$Year, avg_df$Part_Time, type = "o", lty = 2)
-
-legend("topleft",
-       legend = c("Full-Time", "Part-Time"),
-       lty = c(1,2),
-       bty = "n")
-
-# --- Distribution of Retention Rates (All Schools) ---
-# Combine all FT values into one vector
-ft_all <- unlist(df[, ft_cols])
-pt_all <- unlist(df[, pt_cols])
-
-# Histograms
-hist(ft_all, main = "Distribution of Full-Time Retention",
-     xlab = "Retention (%)")
-
-hist(pt_all, main = "Distribution of Part-Time Retention",
-     xlab = "Retention (%)")
-
+# --- Preliminary Exploration ---
 # Summary statistics
-summary(ft_all)
-summary(pt_all)
+summary(ft_ts)
+sd(ft_ts)
 
-sd(ft_all)
-sd(pt_all)
+summary(pt_ts)
+sd(pt_ts)
 
-# --- School-Level Trends ---
-# Example: plot a few random schools
-set.seed(1)
-sample_ids <- sample(df$ID, 5)
+# Plot time series
+plot.ts(ft_ts, main = "Average Full-Time Retention", ylab = "%")
+plot.ts(pt_ts, main = "Average Part-Time Retention", ylab = "%")
 
-for (id in sample_ids) {
+# Combined plot
+ts.plot(ft_ts, pt_ts, col = c("blue", "red"), lwd = 2,
+        main = "FT vs PT Retention Over Time", ylab = "%")
+legend("topleft", legend = c("FT", "PT"),
+       col = c("blue", "red"), lty = 1)
 
-  school <- df[df$ID == id, ]
+# Differencing to Achieve Stationarity
+# First difference
+ft_diff <- diff(ft_ts)
+pt_diff <- diff(pt_ts)
 
-  ft_vals <- as.numeric(school[, ft_cols])
-  pt_vals <- as.numeric(school[, pt_cols])
+plot.ts(ft_diff, main = "Differenced FT Series")
+plot.ts(pt_diff, main = "Differenced PT Series")
 
-  plot(years, ft_vals, type = "o",
-       ylim = range(c(ft_vals, pt_vals), na.rm = TRUE),
-       main = paste("School ID:", id),
-       xlab = "Year", ylab = "Retention (%)")
+# ACF and PACF Plots
+par(mfrow = c(1,2))
+acf(ft_diff, main = "FT ACF")
+pacf(ft_diff, main = "FT PACF")
 
-  lines(years, pt_vals, type = "o", lty = 2)
-
-  legend("topleft",
-         legend = c("FT", "PT"),
-         lty = c(1,2),
-         bty = "n")
-}
-
-# --- Variability Across Schools ---
-# Standard deviation across schools for each year
-sd_ft <- apply(df[, ft_cols], 2, sd, na.rm = TRUE)
-sd_pt <- apply(df[, pt_cols], 2, sd, na.rm = TRUE)
-
-# Plot variability
-plot(years, sd_ft, type = "o",
-     main = "Variability in Full-Time Retention",
-     xlab = "Year", ylab = "SD")
-
-plot(years, sd_pt, type = "o",
-     main = "Variability in Part-Time Retention",
-     xlab = "Year", ylab = "SD")
+acf(pt_diff, main = "PT ACF")
+pacf(pt_diff, main = "PT PACF")
