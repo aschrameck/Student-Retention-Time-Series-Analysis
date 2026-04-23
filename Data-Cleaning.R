@@ -87,10 +87,44 @@ for (yr in years) {
 # Keep only institutions with complete data across all years
 final_data <- full_data[complete.cases(full_data), ]
 
-# Save final cleaned dataset
+# Save final cleaned dataset (wide)
 write.csv(final_data, "retention_rates.csv", row.names = FALSE)
 
+# --- Convert to Long Format ---
+# Identify FT and PT columns
+ft_cols <- grep("_FT$", names(final_data), value = TRUE)
+pt_cols <- grep("_PT$", names(final_data), value = TRUE)
+
+# Extract years
+years <- as.numeric(sub("_FT", "", ft_cols))
+
+# -------- Full-Time Long Format --------
+ft_long <- data.frame(
+  ID = rep(final_data$ID, times = length(ft_cols)),
+  Year = rep(years, each = nrow(final_data)),
+  Retention = as.vector(as.matrix(final_data[, ft_cols])),
+  Type = "FT"
+)
+
+# -------- Part-Time Long Format --------
+pt_long <- data.frame(
+  ID = rep(final_data$ID, times = length(pt_cols)),
+  Year = rep(years, each = nrow(final_data)),
+  Retention = as.vector(as.matrix(final_data[, pt_cols])),
+  Type = "PT"
+)
+
+# -------- Combine into one dataset --------
+retention_long <- rbind(ft_long, pt_long)
+
+# Save long dataset
+write.csv(retention_long, "retention_long.csv", row.names = FALSE)
+
 # Summary
-cat("Final dataset saved as retention_rates.csv\n")
 cat("Number of institutions:", nrow(final_data), "\n")
+
+cat("Saved files:\n")
+cat("- retention_rates.csv (wide format)\n")
 head(final_data)
+cat("- retention_long.csv (long format)\n")
+head(retention_long)
