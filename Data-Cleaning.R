@@ -30,7 +30,7 @@
 # Set working directory: setwd("path/to/your/data")
 
 # Years of interest
-years <- 2004:2024
+years <- 2003:2024
 
 # Initialize empty dataframe
 full_data <- NULL
