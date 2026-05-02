@@ -1,0 +1,523 @@
+---
+title: "PTvsFT"
+author: "Kanaan Law"
+date: "2026-04-28"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+
+
+```{r message=FALSE, warning=FALSE}
+# Load required packages
+library(tidyverse)
+library(lubridate)
+library(tsibble)
+library(feasts)
+library(fable)
+```
+
+
+
+
+```{r message=FALSE, warning=FALSE}
+
+
+# Choose file interactively
+file_path <- file.choose()
+
+# Load data
+df <- read_csv(file_path)
+
+# Reshape wide → long
+df_long <- df %>%
+  pivot_longer(
+    cols = -ID,
+    names_to = c("Year", "Type"),
+    names_sep = "_",
+    values_to = "Retention"
+  ) %>%
+  mutate(
+    Year = as.integer(Year),
+    Type = factor(Type)
+  )
+
+# Aggregate BEFORE converting to tsibble
+df_yearly <- df_long %>%
+  group_by(Year, Type) %>%
+  summarise(AvgRetention = mean(Retention, na.rm = TRUE)) %>%
+  ungroup()
+
+# Now convert to tsibble (no errors)
+df_yearly_ts <- df_yearly %>%
+  as_tsibble(index = Year, key = Type)
+
+# Quick plot
+df_yearly_ts %>%
+  autoplot(AvgRetention)
+
+# Example ARIMA model
+fit <- df_yearly_ts %>%
+  model(ARIMA(AvgRetention))
+
+report(fit)
+
+
+```
+
+```{r warning=FALSE}
+# FULL-TIME RETENTION TIME SERIES
+df_yearly_ts %>%
+  filter(Type == "FT") %>%
+  autoplot(AvgRetention) +
+  labs(
+    title = "Full-Time Retention Rates Over Time",
+    x = "Year",
+    y = "Average Retention (%)"
+  ) +
+  theme_minimal()
+
+```
+
+
+
+
+```{r}
+# PART-TIME RETENTION TIME SERIES
+df_yearly_ts %>%
+  filter(Type == "PT") %>%
+  autoplot(AvgRetention) +
+  labs(
+    title = "Part-Time Retention Rates Over Time",
+    x = "Year",
+    y = "Average Retention (%)"
+  ) +
+  theme_minimal()
+
+```
+
+
+
+
+
+```{r warning=FALSE}
+df_yearly_ts %>%
+  ggplot(aes(x = Year, y = AvgRetention, color = Type)) +
+  geom_line(size = 1.1) +
+  labs(
+    title = "Full-Time vs Part-Time Retention Rates Over Time",
+    x = "Year",
+    y = "Average Retention (%)",
+    color = "Enrollment Type"
+  ) +
+  scale_color_manual(values = c("FT" = "blue", "PT" = "red")) +
+  theme_minimal()
+
+```
+
+
+```{r warning=FALSE}
+# DIFFERENCED FULL-TIME SERIES
+df_yearly_ts %>%
+  filter(Type == "FT") %>%
+  mutate(Diff = difference(AvgRetention)) %>%
+  ggplot(aes(x = Year, y = Diff)) +
+  geom_line(color = "blue", size = 1.1) +
+  labs(
+    title = "Differenced Full-Time Retention Series",
+    x = "Year",
+    y = "First Difference of Avg Retention"
+  ) +
+  theme_minimal()
+
+```
+
+
+```{r warning=FALSE}
+# DIFFERENCED PART-TIME SERIES
+df_yearly_ts %>%
+  filter(Type == "PT") %>%
+  mutate(Diff = difference(AvgRetention)) %>%
+  ggplot(aes(x = Year, y = Diff)) +
+  geom_line(color = "red", size = 1.1) +
+  labs(
+    title = "Differenced Part-Time Retention Series",
+    x = "Year",
+    y = "First Difference of Avg Retention"
+  ) +
+  theme_minimal()
+
+```
+
+
+
+```{r warning=FALSE}
+# DIFFERENCED FULL-TIME SERIES
+ft_diff <- df_yearly_ts %>%
+  filter(Type == "FT") %>%
+  mutate(Diff = difference(AvgRetention))
+
+# ACF
+ft_diff %>%
+  ACF(Diff) %>%
+  autoplot() +
+  labs(
+    title = "ACF of Differenced Full-Time Retention",
+    x = "Lag",
+    y = "ACF"
+  ) +
+  theme_minimal()
+
+# PACF
+ft_diff %>%
+  PACF(Diff) %>%
+  autoplot() +
+  labs(
+    title = "PACF of Differenced Full-Time Retention",
+    x = "Lag",
+    y = "PACF"
+  ) +
+  theme_minimal()
+
+```
+
+
+```{r warning=FALSE}
+# DIFFERENCED PART-TIME SERIES
+pt_diff <- df_yearly_ts %>%
+  filter(Type == "PT") %>%
+  mutate(Diff = difference(AvgRetention))
+
+# ACF
+pt_diff %>%
+  ACF(Diff) %>%
+  autoplot() +
+  labs(
+    title = "ACF of Differenced Part-Time Retention",
+    x = "Lag",
+    y = "ACF"
+  ) +
+  theme_minimal()
+
+# PACF
+pt_diff %>%
+  PACF(Diff) %>%
+  autoplot() +
+  labs(
+    title = "PACF of Differenced Part-Time Retention",
+    x = "Lag",
+    y = "PACF"
+  ) +
+  theme_minimal()
+
+```
+
+
+```{r warning=FALSE}
+# FT model
+fit_ft <- df_yearly_ts %>%
+  filter(Type == "FT") %>%
+  model(ARIMA(AvgRetention))
+
+report(fit_ft)
+```
+
+
+```{r warning=FALSE}
+# PT model
+fit_pt <- df_yearly_ts %>%
+  filter(Type == "PT") %>%
+  model(ARIMA(AvgRetention))
+
+report(fit_pt)
+
+```
+
+
+
+
+
+```{r warning=FALSE}
+# FT forecast
+fc_ft <- fit_ft %>%
+  forecast(h = 5)
+
+# PT forecast
+fc_pt <- fit_pt %>%
+  forecast(h = 5)
+
+```
+
+
+
+```{r warning=FALSE}
+# FT model
+fit_ft <- df_yearly_ts %>%
+  filter(Type == "FT") %>%
+  model(ARIMA(AvgRetention))
+
+# FT forecast
+fc_ft <- fit_ft %>%
+  forecast(h = 5)
+
+# FT forecast plot
+fc_ft %>%
+  autoplot(df_yearly_ts %>% filter(Type == "FT")) +
+  labs(
+    title = "Full-Time Retention Forecast",
+    x = "Year",
+    y = "Average Retention (%)"
+  ) +
+  theme_minimal()
+
+
+```
+
+
+
+
+```{r warning=FALSE}
+# PT model
+fit_pt <- df_yearly_ts %>%
+  filter(Type == "PT") %>%
+  model(ARIMA(AvgRetention))
+
+# PT forecast
+fc_pt <- fit_pt %>%
+  forecast(h = 5)
+
+# PT forecast plot
+fc_pt %>%
+  autoplot(df_yearly_ts %>% filter(Type == "PT")) +
+  labs(
+    title = "Part-Time Retention Forecast",
+    x = "Year",
+    y = "Average Retention (%)"
+  ) +
+  theme_minimal()
+
+
+```
+
+
+
+
+
+```{r warning=FALSE}
+library(fabletools)
+library(dplyr)
+library(ggplot2)
+```
+
+
+
+
+```{r warning=FALSE}
+gg_tsresiduals(fit_ft)
+gg_tsresiduals(fit_pt)
+
+```
+
+
+
+
+
+```{r}
+yearly_wide <- df_long %>%
+  group_by(Year, Type) %>%
+  summarise(mean_retention = mean(Retention, na.rm = TRUE), .groups = "drop") %>%
+  mutate(Type = ifelse(Type == "FT", "FullTime", "PartTime")) %>%
+  pivot_wider(
+    names_from = Type,
+    values_from = mean_retention
+  ) %>%
+  arrange(Year)
+
+yearly_wide
+```
+
+
+
+Create time‑series objects
+```{r}
+library(forecast)
+
+start_year <- min(yearly_wide$Year)
+end_year   <- max(yearly_wide$Year)
+
+ft_ts <- ts(yearly_wide$FullTime, start = start_year, end = end_year, frequency = 1)
+pt_ts <- ts(yearly_wide$PartTime, start = start_year, end = end_year, frequency = 1)
+
+```
+
+```{r}
+par(mfrow = c(2,1))
+plot(ft_ts, main = "Full-Time Retention", ylab = "Retention (%)", xlab = "Year")
+plot(pt_ts, main = "Part-Time Retention", ylab = "Retention (%)", xlab = "Year")
+par(mfrow = c(1,1))
+```
+
+
+Plot the two series
+
+```{r}
+library(tseries)
+
+par(mfrow = c(2,2))
+Acf(ft_ts, main = "ACF FT")
+Pacf(ft_ts, main = "PACF FT")
+Acf(pt_ts, main = "ACF PT")
+Pacf(pt_ts, main = "PACF PT")
+par(mfrow = c(1,1))
+
+adf_ft <- adf.test(ft_ts)
+adf_pt <- adf.test(pt_ts)
+
+adf_ft
+adf_pt
+
+```
+
+
+
+
+Stationarity + ACF/PACF
+```{r warning=FALSE}
+fit_ft <- auto.arima(ft_ts)
+fit_pt <- auto.arima(pt_ts)
+
+summary(fit_ft)
+summary(fit_pt)
+
+AIC(fit_ft, fit_pt)
+BIC(fit_ft, fit_pt)
+
+checkresiduals(fit_ft)
+checkresiduals(fit_pt)
+
+```
+
+
+
+
+
+ARIMA model comparison
+```{r}
+lm_ft <- lm(FullTime ~ Year, data = yearly_wide)
+lm_pt <- lm(PartTime ~ Year, data = yearly_wide)
+
+summary(lm_ft)
+summary(lm_pt)
+
+```
+
+
+
+Linear trend comparison
+```{r}
+lm_ft <- lm(FullTime ~ Year, data = yearly_wide)
+lm_pt <- lm(PartTime ~ Year, data = yearly_wide)
+
+summary(lm_ft)
+summary(lm_pt)
+
+```
+
+Var model
+
+
+
+```{r warning=FALSE}
+
+library(vars)
+
+both_ts <- cbind(
+  FullTime  = ft_ts,
+  PartTime  = pt_ts
+)
+
+lagselect <- VARselect(both_ts, lag.max = 5, type = "const")
+lagselect
+
+
+p_chosen <- lagselect$selection["AIC(n)"]
+
+
+```
+
+
+
+
+```{r}
+var_fit <- VAR(both_ts, p = p_chosen, type = "const")
+summary(var_fit)
+
+```
+
+
+```{r}
+serial_test <- serial.test(var_fit, lags.pt = 5, type = "PT.asymptotic")
+serial_test
+
+```
+
+```{r}
+# Forecast next 5 years
+fc_ft <- forecast(fit_ft, h = 5)
+fc_pt <- forecast(fit_pt, h = 5)
+
+autoplot(fc_ft) + ggtitle("Forecast: Full-Time Retention")
+autoplot(fc_pt) + ggtitle("Forecast: Part-Time Retention")
+
+```
+
+
+
+
+ETS section:
+
+```{r}
+ets_ft <- ets(ft_ts)
+ets_pt <- ets(pt_ts)
+
+summary(ets_ft)
+summary(ets_pt)
+```
+```{r}
+train_ft <- window(ft_ts, start = c(2003, 1), end = c(2017, 1))
+test_ft  <- window(ft_ts, start = c(2018, 1), end = c(2024, 1))
+
+train_pt <- window(pt_ts, start = c(2003, 1), end = c(2017, 1))
+test_pt  <- window(pt_ts, start = c(2018, 1), end = c(2024, 1))
+
+
+ets_ft <- ets(train_ft)
+ets_pt <- ets(train_pt)
+
+ets_ft_fc <- forecast(ets_ft, h = length(test_ft))
+ets_pt_fc <- forecast(ets_pt, h = length(test_pt))
+
+
+
+
+```
+
+
+```{r}
+accuracy(ets_ft_fc, test_ft)
+accuracy(ets_pt_fc, test_pt)
+
+
+
+```
+
+
+
+
+
+
+
+
+
